@@ -3,51 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Viewer</title>
+    <title>HLS Live Streaming & Recording</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
-    <h2>Latest Captured Image</h2>
-    <img id="receivedImage" alt="Captured Image" style="max-width: 100%;">
 
-    <script type="module">
-        // Load the image viewer script
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    <h2>HLS Live Streaming & Recording</h2>
 
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyD_Btusq5Y0xkkKcyJtMGpJILVctbAfwUc",
-            authDomain: "website-50137.firebaseapp.com",
-            databaseURL: "https://website-50137-default-rtdb.firebaseio.com/",
-            projectId: "website-50137",
-            storageBucket: "website-50137.appspot.com",
-            messagingSenderId: "488588300747",
-            appId: "1:488588300747:web:19e1e00246a851ba03e64e",
-            measurementId: "G-QH9EMHRV04"
-        };
+    <!-- Input for HLS Streaming URL -->
+    <input type="text" id="streamUrl" placeholder="Enter HLS URL (e.g., https://example.com/stream.m3u8)" style="width: 80%;">
+    <button id="loadStream">Load Stream</button>
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
+    <!-- Video Player -->
+    <video id="video" controls autoplay style="width: 100%; max-width: 800px;"></video>
 
-        let lastImageUrl = "";
+    <!-- Recording Controls -->
+    <button id="startRecord" disabled>Start Recording</button>
+    <button id="stopRecord" disabled>Stop Recording</button>
+    <a id="downloadLink" style="display: none;">Download Recording</a>
 
-        function fetchLatestImage() {
-            const imagesRef = ref(db, "captured_images");
-            const latestImageQuery = query(imagesRef, limitToLast(1));
+    <script>
+        const video = document.getElementById('video');
+        const streamUrlInput = document.getElementById('streamUrl');
+        const loadStreamButton = document.getElementById('loadStream');
+        const startRecordButton = document.getElementById('startRecord');
+        const stopRecordButton = document.getElementById('stopRecord');
+        const downloadLink = document.getElementById('downloadLink');
 
-            onValue(latestImageQuery, (snapshot) => {
-                snapshot.forEach((childSnapshot) => {
-                    const data = childSnapshot.val();
-                    if (data.image && data.image !== lastImageUrl) {
-                        lastImageUrl = data.image;
-                        document.getElementById("receivedImage").src = data.image;
-                    }
-                });
-            });
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        function loadStream(url) {
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                startRecordButton.disabled = false;
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url; // Native HLS support (Safari)
+                startRecordButton.disabled = false;
+            } else {
+                alert("HLS is not supported in this browser.");
+            }
         }
 
-        fetchLatestImage();
+        loadStreamButton.addEventListener('click', () => {
+            const url = streamUrlInput.value.trim();
+            if (url) {
+                loadStream(url);
+            } else {
+                alert("Please enter a valid HLS URL.");
+            }
+        });
+
+        startRecordButton.addEventListener('click', async () => {
+            const stream = video.captureStream();
+            mediaRecorder = new MediaRecorder(stream);
+            recordedChunks = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/mp4' });
+                const url = URL.createObjectURL(blob);
+                downloadLink.href = url;
+                downloadLink.download = 'hls-recording.mp4';
+                downloadLink.style.display = 'block';
+                downloadLink.textContent = 'Download Recording';
+            };
+
+            mediaRecorder.start();
+            startRecordButton.disabled = true;
+            stopRecordButton.disabled = false;
+        });
+
+        stopRecordButton.addEventListener('click', () => {
+            mediaRecorder.stop();
+            startRecordButton.disabled = false;
+            stopRecordButton.disabled = true;
+        });
+
     </script>
+
 </body>
 </html>
